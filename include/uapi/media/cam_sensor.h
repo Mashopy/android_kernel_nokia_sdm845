@@ -24,6 +24,8 @@
  * @flash_slot_id    :  Flash slot id which connected to sensor
  * @csiphy_slot_id   :  CSIphy slot id which connected to sensor
  * @irled_slot_id    :  IRLED slot id which connected to sensor
+ * @smart_sensor     :  Is this a smart sensor(0 - No, 1 - Yes)
+ * @csiphy1_slot_id  :  CSIphy1 slot id which connected to sensor
  *
  */
 struct  cam_sensor_query_cap {
@@ -38,6 +40,8 @@ struct  cam_sensor_query_cap {
 	uint32_t        flash_slot_id;
 	uint32_t        csiphy_slot_id;
 	uint32_t        ir_led_slot_id;
+	uint32_t        smart_sensor;
+	uint32_t        csiphy1_slot_id;
 } __attribute__((packed));
 
 /**
@@ -370,6 +374,7 @@ struct cam_sensor_acquire_dev {
 	uint32_t    handle_type;
 	uint32_t    reserved;
 	uint64_t    info_handle;
+	uint32_t    sync_obj;
 } __attribute__((packed));
 
 /**

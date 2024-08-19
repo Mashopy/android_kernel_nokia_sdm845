@@ -30,3 +30,4 @@ header-y += msmb_isp.h
 header-y += msmb_qca.h
 header-y += msmb_ispif.h
 header-y += msmb_pproc.h
+header-y += msm_light_messaging.h
