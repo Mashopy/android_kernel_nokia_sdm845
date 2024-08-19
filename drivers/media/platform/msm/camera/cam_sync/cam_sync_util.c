@@ -387,6 +387,41 @@ void cam_sync_util_send_v4l2_event(uint32_t id,
 		sync_obj);
 }
 
+#ifdef CONFIG_FIH_AOP
+void cam_sync_util_send_v4l2_asic_event(uint32_t id,
+    uint32_t sync_obj,
+    int status,
+    void *payload,
+    int len_in_u64,
+    void *asic_payload,
+    int asic_len)
+{
+    struct v4l2_event event;
+    __u64 *payload_data = NULL;
+    struct cam_sync_ev_header *ev_header = NULL;
+    int max_size = sizeof(event.u.data) -
+                   sizeof(struct cam_sync_ev_header) -
+                   len_in_u64 * sizeof(__u64);
+
+    event.id = id;
+    event.type = CAM_LIGHT_CCB_V4L_EVENT;
+
+    ev_header = CAM_SYNC_GET_HEADER_PTR(event);
+    ev_header->sync_obj = sync_obj;
+    ev_header->status = status;
+
+    payload_data = CAM_SYNC_GET_PAYLOAD_PTR(event, __u64);
+    memcpy(payload_data, payload, len_in_u64*sizeof(__u64));
+
+    if (asic_len > max_size)
+        asic_len = max_size;
+
+    memcpy(&payload_data[len_in_u64], asic_payload, asic_len);
+
+    v4l2_event_queue(sync_dev->vdev, &event);
+}
+#endif
+
 int cam_sync_util_update_parent_state(struct sync_table_row *parent_row,
 	int new_state)
 {

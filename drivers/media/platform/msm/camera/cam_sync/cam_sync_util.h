@@ -113,6 +113,28 @@ void cam_sync_util_send_v4l2_event(uint32_t id,
 	void *payload,
 	int len);
 
+#ifdef CONFIG_FIH_AOP
+/**
+ * @brief: Function to send V4L asic event to user space with asic message
+ * @param id       : V4L event id to send
+ * @param sync_obj : Sync obj for which event needs to be sent
+ * @param status   : Status of the event
+ * @payload        : Payload (Sync Manager) that needs to be sent to user space
+ * @len_in_u64     : Length of the payload in u64
+ * @asic_payload   : Payload (asic message) that needs to be sent to user space
+ * @asic_len       : Length of the asic message
+ *
+ * @return None
+ */
+void cam_sync_util_send_v4l2_asic_event(uint32_t id,
+    uint32_t sync_obj,
+    int status,
+    void *payload,
+    int len_in_u64,
+    void *asic_payload,
+    int asic_len);
+#endif
+
 /**
  * @brief: Function which gets the next state of the sync object based on the
  *         current state and the new state

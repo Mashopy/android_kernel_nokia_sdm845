@@ -1470,6 +1470,9 @@ void cam_ife_cam_cdm_callback(uint32_t handle, void *userdata,
 	}
 
 	ctx = userdata;
+#ifdef CONFIG_FIH_AOP
+	ctx->cdmCallbackCookie = cookie;
+#endif
 
 	if (status == CAM_CDM_CB_STATUS_BL_SUCCESS) {
 		complete(&ctx->config_done_complete);
@@ -1477,9 +1480,15 @@ void cam_ife_cam_cdm_callback(uint32_t handle, void *userdata,
 			"Called by CDM hdl=%x, udata=%pK, status=%d, cookie=%llu ctx_index=%d",
 			 handle, userdata, status, cookie, ctx->ctx_index);
 	} else {
+#ifdef CONFIG_FIH_AOP
+		CAM_WARN(CAM_ISP,
+			"Called by CDM hdl=%x, udata=%pK, status=%d, cookie=%llu ctx_index=%d",
+			 handle, userdata, status, cookie, ctx->ctx_index);
+#else
 		CAM_WARN(CAM_ISP,
 			"Called by CDM hdl=%x, udata=%pK, status=%d, cookie=%llu",
 			 handle, userdata, status, cookie);
+#endif
 	}
 }
 
@@ -1804,9 +1813,15 @@ static int cam_ife_mgr_config_hw(void *hw_mgr_priv,
 					rc = -ETIMEDOUT;
 			} else {
 				rc = 0;
+#ifdef CONFIG_FIH_AOP
+				CAM_DBG(CAM_ISP,
+					"config done Success for rdi only:%d, cdm cookie:%llu, req_id=%llu ctx_index = %d",
+					ctx->is_rdi_only_context, ctx->cdmCallbackCookie, cfg->request_id, ctx->ctx_index);
+#else
 				CAM_DBG(CAM_ISP,
 					"config done Success for req_id=%llu ctx_index %d",
 					cfg->request_id, ctx->ctx_index);
+#endif
 			}
 		}
 	} else {
@@ -3618,6 +3633,12 @@ static int cam_ife_hw_mgr_handle_reg_update(
 				break;
 			}
 
+#ifdef CONFIG_FIH_AOP
+			CAM_DBG(CAM_ISP,
+				"RDI: current_core_id = %d , core_idx res = %d",
+				 core_idx, hw_res->hw_intf->hw_idx);
+#endif
+
 			if (core_idx == hw_res->hw_intf->hw_idx)
 				rup_status = hw_res->bottom_half_handler(
 					hw_res, evt_payload);
@@ -4496,7 +4517,11 @@ static int cam_ife_hw_mgr_debug_register(void)
 		CAM_ERR(CAM_ISP, "failed to create cam_ife_camif_debug");
 		goto err;
 	}
+#ifdef CONFIG_FIH_AOP
+	g_ife_hw_mgr.debug_cfg.enable_recovery = 1;
+#else
 	g_ife_hw_mgr.debug_cfg.enable_recovery = 0;
+#endif
 
 	return 0;
 

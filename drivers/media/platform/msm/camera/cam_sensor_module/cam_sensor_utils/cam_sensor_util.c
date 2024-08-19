@@ -1444,6 +1444,13 @@ int msm_cam_sensor_handle_reg_gpio(int seq_type,
 	return 0;
 }
 
+#ifdef CONFIG_FIH_AOP
+#ifdef CONFIG_SERIAL_MSM_GENI
+/* FIH, add extern control function for asic uart */
+extern int asic_uart_clk_enable(int line, int on);
+#endif
+#endif
+
 static int cam_config_mclk_reg(struct cam_sensor_power_ctrl_t *ctrl,
 	struct cam_hw_soc_info *soc_info, int32_t index)
 {
@@ -1500,6 +1507,9 @@ int cam_sensor_core_power_up(struct cam_sensor_power_ctrl_t *ctrl,
 		struct cam_hw_soc_info *soc_info)
 {
 	int rc = 0, index = 0, no_gpio = 0, ret = 0, num_vreg, j = 0, i = 0;
+#ifdef CONFIG_FIH_AOP
+	int power_up = 1;
+#endif
 	int32_t vreg_idx = -1;
 	struct cam_sensor_power_setting *power_setting = NULL;
 	struct msm_camera_gpio_num_info *gpio_num_info = NULL;
@@ -1509,6 +1519,12 @@ int cam_sensor_core_power_up(struct cam_sensor_power_ctrl_t *ctrl,
 		CAM_ERR(CAM_SENSOR, "Invalid ctrl handle");
 		return -EINVAL;
 	}
+
+#ifdef CONFIG_FIH_AOP
+	if ((soc_info->asic_supported == 1) && (soc_info->asic_sync_obj == 0)) {
+		power_up = 0;
+	}
+#endif
 
 	gpio_num_info = ctrl->gpio_num_info;
 	num_vreg = soc_info->num_rgltr;
@@ -1569,6 +1585,11 @@ int cam_sensor_core_power_up(struct cam_sensor_power_ctrl_t *ctrl,
 
 		switch (power_setting->seq_type) {
 		case SENSOR_MCLK:
+#ifdef CONFIG_FIH_AOP
+			if (power_up == 0) {
+				break;
+			}
+#endif
 			if (power_setting->seq_val >= soc_info->num_clk) {
 				CAM_ERR(CAM_SENSOR, "clk index %d >= max %u",
 					power_setting->seq_val,
@@ -1636,6 +1657,11 @@ int cam_sensor_core_power_up(struct cam_sensor_power_ctrl_t *ctrl,
 		case SENSOR_STANDBY:
 		case SENSOR_CUSTOM_GPIO1:
 		case SENSOR_CUSTOM_GPIO2:
+#ifdef CONFIG_FIH_AOP
+			if (power_up == 0) {
+				break;
+			}
+#endif
 			if (no_gpio) {
 				CAM_ERR(CAM_SENSOR, "request gpio failed");
 				return no_gpio;
@@ -1739,6 +1765,14 @@ int cam_sensor_core_power_up(struct cam_sensor_power_ctrl_t *ctrl,
 	if (ret)
 		CAM_ERR(CAM_SENSOR,
 			"Failed to post init shared pinctrl");
+#ifdef CONFIG_FIH_AOP
+#ifdef CONFIG_SERIAL_MSM_GENI
+        /* FIH, asic uart control for tlog */
+        if (soc_info->asic_supported && soc_info->asic_sync_obj) {
+                asic_uart_clk_enable(soc_info->asic_uart_line, 1);
+        }
+#endif
+#endif
 
 	return 0;
 power_up_failed:
@@ -1877,6 +1911,9 @@ int cam_sensor_util_power_down(struct cam_sensor_power_ctrl_t *ctrl,
 		struct cam_hw_soc_info *soc_info)
 {
 	int index = 0, ret = 0, num_vreg = 0, i;
+#ifdef CONFIG_FIH_AOP
+	int power_down = 1;
+#endif
 	struct cam_sensor_power_setting *pd = NULL;
 	struct cam_sensor_power_setting *ps = NULL;
 	struct msm_camera_gpio_num_info *gpio_num_info = NULL;
@@ -1886,6 +1923,14 @@ int cam_sensor_util_power_down(struct cam_sensor_power_ctrl_t *ctrl,
 		CAM_ERR(CAM_SENSOR, "failed ctrl %pK",  ctrl);
 		return -EINVAL;
 	}
+
+#ifdef CONFIG_FIH_AOP
+	if (soc_info->asic_supported == 1) {
+		if (soc_info->asic_sync_obj == 0) {
+			power_down = 0;
+		}
+	}
+#endif
 
 	gpio_num_info = ctrl->gpio_num_info;
 	num_vreg = soc_info->num_rgltr;
@@ -1915,6 +1960,11 @@ int cam_sensor_util_power_down(struct cam_sensor_power_ctrl_t *ctrl,
 		CAM_DBG(CAM_SENSOR, "seq_type %d",  pd->seq_type);
 		switch (pd->seq_type) {
 		case SENSOR_MCLK:
+#ifdef CONFIG_FIH_AOP
+			if (power_down == 0) {
+				break;
+			}
+#endif
 			for (i = soc_info->num_clk - 1; i >= 0; i--) {
 				cam_soc_util_clk_disable(soc_info->clk[i],
 					soc_info->clk_name[i]);
@@ -1932,6 +1982,11 @@ int cam_sensor_util_power_down(struct cam_sensor_power_ctrl_t *ctrl,
 		case SENSOR_CUSTOM_GPIO1:
 		case SENSOR_CUSTOM_GPIO2:
 
+#ifdef CONFIG_FIH_AOP
+			if (power_down == 0) {
+				break;
+			}
+#endif
 			if (!gpio_num_info->valid[pd->seq_type])
 				continue;
 
@@ -2025,6 +2080,14 @@ int cam_sensor_util_power_down(struct cam_sensor_power_ctrl_t *ctrl,
 		cam_res_mgr_shared_pinctrl_put();
 	}
 
+#ifdef CONFIG_FIH_AOP
+#ifdef CONFIG_SERIAL_MSM_GENI
+	/* FIH, asic uart control for tlog */
+	if (soc_info->asic_supported && soc_info->asic_sync_obj) {
+		asic_uart_clk_enable(soc_info->asic_uart_line, 0);
+	}
+#endif
+#endif
 	if (soc_info->use_shared_clk)
 		cam_res_mgr_shared_clk_config(false);
 

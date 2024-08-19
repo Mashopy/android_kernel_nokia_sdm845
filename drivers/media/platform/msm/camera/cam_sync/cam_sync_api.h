@@ -88,6 +88,10 @@ int cam_sync_deregister_callback(sync_callback cb_func,
  */
 int cam_sync_signal(int32_t sync_obj, uint32_t status);
 
+#ifdef CONFIG_FIH_AOP
+int cam_sync_signal_with_info(int32_t sync_obj, uint32_t status, void *payload, int len);
+#endif
+
 /**
  * @brief: Merges multiple sync objects
  *

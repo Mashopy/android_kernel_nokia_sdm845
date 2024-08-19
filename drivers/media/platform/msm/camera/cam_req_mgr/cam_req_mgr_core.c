@@ -2554,7 +2554,12 @@ int cam_req_mgr_unlink(struct cam_req_mgr_unlink_info *unlink_info)
 	rc = __cam_req_mgr_unlink(link);
 
 	/* Free curent link and put back into session's free pool of links */
+#ifdef CONFIG_FIH_AOP
+	if (!rc)
+		__cam_req_mgr_unreserve_link(cam_session, link);
+#else
 	__cam_req_mgr_unreserve_link(cam_session, link);
+#endif
 
 done:
 	mutex_unlock(&g_crm_core_dev->crm_lock);
@@ -2800,6 +2805,24 @@ int cam_req_mgr_link_control(struct cam_req_mgr_link_control *control)
 
 		mutex_lock(&link->lock);
 		if (control->ops == CAM_REQ_MGR_LINK_ACTIVATE) {
+#ifdef CONFIG_FIH_AOP
+			if ((link->num_devs == 1) && (link->l_dev[0].dev_info.dev_id == CAM_REQ_MGR_DEVICE_IFE)) {
+				CAM_ERR(CAM_CRM,
+					"SOF timer cancelled: link=0x%x",
+					link->link_hdl);
+			} else {
+				/* Start SOF watchdog timer */
+				rc = crm_timer_init(&link->watchdog,
+					CAM_REQ_MGR_WATCHDOG_TIMEOUT, link,
+					&__cam_req_mgr_sof_freeze);
+				if (rc < 0) {
+					CAM_ERR(CAM_CRM,
+						"SOF timer start fails: link=0x%x",
+						link->link_hdl);
+					rc = -EFAULT;
+				}
+			}
+#else
 			/* Start SOF watchdog timer */
 			rc = crm_timer_init(&link->watchdog,
 				CAM_REQ_MGR_WATCHDOG_TIMEOUT, link,
@@ -2810,6 +2833,7 @@ int cam_req_mgr_link_control(struct cam_req_mgr_link_control *control)
 					link->link_hdl);
 				rc = -EFAULT;
 			}
+#endif
 			/* notify nodes */
 			for (j = 0; j < link->num_devs; j++) {
 				dev = &link->l_dev[j];

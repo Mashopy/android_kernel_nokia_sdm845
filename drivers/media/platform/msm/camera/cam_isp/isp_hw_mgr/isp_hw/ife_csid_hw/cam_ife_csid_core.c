@@ -2720,12 +2720,22 @@ static int cam_ife_csid_process_cmd(void *hw_priv,
 	struct cam_isp_resource_node         *res = NULL;
 
 	if (!hw_priv || !cmd_args) {
+#ifdef CONFIG_FIH_AOP
+		CAM_ERR(CAM_ISP, "CSID: Invalid arguments: hw_priv:%p, cmd_args:%p", hw_priv, cmd_args);
+#else
 		CAM_ERR(CAM_ISP, "CSID: Invalid arguments");
+#endif
 		return -EINVAL;
 	}
 
 	csid_hw_info = (struct cam_hw_info  *)hw_priv;
 	csid_hw = (struct cam_ife_csid_hw   *)csid_hw_info->core_info;
+#ifdef CONFIG_FIG_AOP
+	if (csid_hw == NULL) {
+		CAM_ERR(CAM_ISP, "CSID: Invalid argument csid_hw_info->core_info NULL");
+		return -EINVAL;
+	}
+#endif
 
 	switch (cmd_type) {
 	case CAM_IFE_CSID_CMD_GET_TIME_STAMP:
