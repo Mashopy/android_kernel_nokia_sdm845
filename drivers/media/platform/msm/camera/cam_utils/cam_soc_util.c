@@ -1128,6 +1128,28 @@ static int cam_soc_util_get_dt_regulator_info
 	return rc;
 }
 
+#ifdef CONFIG_FIH_AOP
+/* add to parsing asic uart line number to control */
+static int asic_uart_line(struct device_node *of_node)
+{
+	struct device_node *src_node = NULL;
+	int line = 0;
+
+	if (!of_node)
+		return -1;
+
+	src_node = of_parse_phandle(of_node, "asic-uart-src", 0);
+	if (!src_node)
+		return -1;
+
+	line = of_alias_get_id(src_node, "hsuart");
+	if (line < 0)
+		return -1;
+
+	return line;
+}
+#endif
+
 int cam_soc_util_get_dt_properties(struct cam_hw_soc_info *soc_info)
 {
 	struct device_node *of_node = NULL;
@@ -1145,6 +1167,17 @@ int cam_soc_util_get_dt_properties(struct cam_hw_soc_info *soc_info)
 		return rc;
 	}
 
+#ifdef CONFIG_FIH_AOP
+	/* fill asic_supported check*/
+	rc = of_property_read_u32(of_node, "asic_supported", &soc_info->asic_supported);
+	if (rc < 0) {
+		soc_info->asic_supported = 0;
+	} else {
+		soc_info->asic_supported = 1;
+		soc_info->asic_uart_line = asic_uart_line(of_node);
+		soc_info->asic_sync_obj = 0;
+	}
+#endif
 	count = of_property_count_strings(of_node, "reg-names");
 	if (count <= 0) {
 		CAM_DBG(CAM_UTIL, "no reg-names found for: %s",

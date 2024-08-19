@@ -158,6 +158,9 @@ struct cam_ife_hw_mgr_ctx {
 	uint32_t                        is_rdi_only_context;
 	struct completion               config_done_complete;
 	bool                            init_done;
+#ifdef CONFIG_FIH_AOP
+    uint64_t                        cdmCallbackCookie;
+#endif
 };
 
 /**

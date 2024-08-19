@@ -6,5 +6,8 @@ ccflags-y += -Idrivers/media/platform/msm/camera/cam_sensor_module/cam_sensor_io
 ccflags-y += -Idrivers/media/platform/msm/camera/cam_sensor_module/cam_sensor_utils
 ccflags-y += -Idrivers/media/platform/msm/camera/cam_smmu/
 ccflags-y += -Idrivers/media/platform/msm/camera/cam_utils
+#ifdef CONFIG_FIH_AOP
+ccflags-y += -Idrivers/media/platform/msm/camera/cam_sync
+#endif
 
 obj-$(CONFIG_SPECTRA_CAMERA) += cam_sensor_dev.o cam_sensor_core.o cam_sensor_soc.o

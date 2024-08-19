@@ -268,6 +268,70 @@ int cam_sync_signal(int32_t sync_obj, uint32_t status)
 	return 0;
 }
 
+#ifdef CONFIG_FIH_AOP
+int cam_sync_signal_with_info(int32_t sync_obj, uint32_t status, void *payload, int len)
+{
+	int rc = 0;
+	struct sync_table_row *row = NULL;
+	struct sync_user_payload *payload_info;
+	struct sync_user_payload *temp_payload_info;
+
+	if (sync_obj >= CAM_SYNC_MAX_OBJS || sync_obj <= 0) {
+		CAM_ERR(CAM_SYNC, "Error: Out of range sync obj");
+		return -EINVAL;
+	}
+	row = sync_dev->sync_table + sync_obj;
+	if (row->state == CAM_SYNC_STATE_INVALID) {
+		CAM_ERR(CAM_SYNC,
+			"Error: accessing an uninitialized sync obj = %d",
+			sync_obj);
+		return -EINVAL;
+	}
+
+	spin_lock_bh(&sync_dev->row_spinlocks[sync_obj]);
+	if (row->type == CAM_SYNC_TYPE_GROUP) {
+		spin_unlock_bh(&sync_dev->row_spinlocks[sync_obj]);
+		CAM_ERR(CAM_SYNC, "Error: Signaling a GROUP sync object = %d",
+			sync_obj);
+		return -EINVAL;
+	}
+
+	row->state = status;
+
+	/* Dispatch user payloads if any were registered earlier */
+	list_for_each_entry_safe(payload_info, temp_payload_info,
+		&row->user_payload_list, list) {
+		spin_lock_bh(&sync_dev->cam_sync_eventq_lock);
+		if (!sync_dev->cam_sync_eventq) {
+			spin_unlock_bh(
+			&sync_dev->cam_sync_eventq_lock);
+			break;
+		}
+		spin_unlock_bh(&sync_dev->cam_sync_eventq_lock);
+
+		cam_sync_util_send_v4l2_asic_event(
+			CAM_SYNC_V4L_EVENT_ID_CB_TRIG,
+			sync_obj,
+			status,
+			payload_info->payload_data,
+			CAM_SYNC_PAYLOAD_WORDS,
+			payload,
+			len);
+
+	}
+
+	/*
+	 * This needs to be done because we want to unblock anyone
+	 * who might be blocked and waiting on this sync object
+	 */
+	complete_all(&row->signaled);
+
+	spin_unlock_bh(&sync_dev->row_spinlocks[sync_obj]);
+
+	return rc;
+}
+#endif
+
 int cam_sync_merge(int32_t *sync_obj, uint32_t num_objs, int32_t *merged_obj)
 {
 	int rc;

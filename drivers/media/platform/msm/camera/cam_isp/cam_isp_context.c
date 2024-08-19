@@ -557,6 +557,54 @@ end:
 	return rc;
 }
 
+#ifdef CONFIG_FIH_AOP
+static int __cam_isp_ctx_reg_upd_in_bubble_applied_state(
+	struct cam_isp_context *ctx_isp, void *evt_data)
+{
+	int rc = 0;
+	struct cam_context      *ctx = ctx_isp->base;
+
+	if (list_empty(&ctx->active_req_list)) {
+		CAM_ERR(CAM_ISP, "Reg upd ack with no active request");
+		goto end;
+	}
+
+    /*
+     * We can get here because the EPOCH event occurs before the REG UPDATE ACK
+     * comes back from the ISP.  We handle this by simply changing to the
+     * EPOCH state as though the events came in, in the right order.
+     */
+	ctx_isp->substate_activated = CAM_ISP_CTX_ACTIVATED_EPOCH;
+	CAM_DBG(CAM_ISP, "Reg Update in Bubble Applied state: next substate %d", ctx_isp->substate_activated);
+
+end:
+	return rc;
+}
+
+static int __cam_isp_ctx_reg_upd_in_bubble_state(
+	struct cam_isp_context *ctx_isp, void *evt_data)
+{
+	int rc = 0;
+	struct cam_context      *ctx = ctx_isp->base;
+
+	if (list_empty(&ctx->active_req_list)) {
+		CAM_ERR(CAM_ISP, "Reg upd ack with no active request");
+		goto end;
+	}
+
+    /*
+     * We can get here because the EPOCH event occurs before the REG UPDATE ACK
+     * comes back from the ISP.  We handle this by simply changing to the
+     * EPOCH state as though the events came in, in the right order.
+     */
+	ctx_isp->substate_activated = CAM_ISP_CTX_ACTIVATED_EPOCH;
+	CAM_DBG(CAM_ISP, "Reg Update in Bubble state: next substate %d", ctx_isp->substate_activated);
+
+end:
+	return rc;
+}
+#endif
+
 static int __cam_isp_ctx_notify_sof_in_actived_state(
 	struct cam_isp_context *ctx_isp, void *evt_data)
 {
@@ -1118,7 +1166,11 @@ static struct cam_isp_ctx_irq_ops
 		.irq_ops = {
 			__cam_isp_ctx_handle_error,
 			__cam_isp_ctx_sof_in_activated_state,
+#ifdef CONFIG_FIH_AOP
+			__cam_isp_ctx_reg_upd_in_bubble_state,
+#else
 			NULL,
+#endif
 			__cam_isp_ctx_notify_sof_in_actived_state,
 			__cam_isp_ctx_notify_eof_in_actived_state,
 			__cam_isp_ctx_buf_done_in_bubble,
@@ -1129,9 +1181,17 @@ static struct cam_isp_ctx_irq_ops
 		.irq_ops = {
 			__cam_isp_ctx_handle_error,
 			__cam_isp_ctx_sof_in_activated_state,
+#ifdef CONFIG_FIH_AOP
+			__cam_isp_ctx_reg_upd_in_bubble_applied_state,
+#else
 			__cam_isp_ctx_reg_upd_in_activated_state,
+#endif
 			__cam_isp_ctx_epoch_in_bubble_applied,
+#ifdef CONFIG_FIH_AOP
+			__cam_isp_ctx_notify_eof_in_actived_state,
+#else
 			NULL,
+#endif
 			__cam_isp_ctx_buf_done_in_bubble_applied,
 		},
 	},
@@ -1192,8 +1252,12 @@ static int __cam_isp_ctx_apply_req_in_activated_state(
 		goto end;
 	}
 
+#ifdef CONFIG_FIH_AOP
+	CAM_DBG(CAM_REQ, "CtxId:%d, Apply request %lld in substate %d", ctx_isp->base->ctx_id, req->request_id, ctx_isp->substate_activated);
+#else
 	CAM_DBG(CAM_REQ, "Apply request %lld in substate %d", req->request_id,
 		ctx_isp->substate_activated);
+#endif
 	req_isp = (struct cam_isp_ctx_req *) req->req_priv;
 
 	if (ctx_isp->active_req_cnt >=  2) {
@@ -1233,15 +1297,24 @@ static int __cam_isp_ctx_apply_req_in_activated_state(
 		ctx_isp->last_applied_req_id = apply->request_id;
 		list_del_init(&req->list);
 		list_add_tail(&req->list, &ctx->wait_req_list);
+#ifdef CONFIG_FIH_AOP
+		CAM_DBG(CAM_ISP, "CtxId:%d, new substate state %d, applied req %lld",
+			ctx_isp->base->ctx_id, next_state, ctx_isp->last_applied_req_id);
+#else
 		CAM_DBG(CAM_ISP, "new substate state %d, applied req %lld",
 			next_state, ctx_isp->last_applied_req_id);
+#endif
 		spin_unlock_bh(&ctx->lock);
 	}
 end:
 	if (ctx_isp != NULL) {
 		__cam_isp_ctx_update_state_monitor_array(ctx_isp,
 			CAM_ISP_STATE_CHANGE_TRIGGER_SOF,
+#ifdef CONFIG_FIH_AOP
+			apply->request_id);
+#else
 			ctx->req_list->request_id);
+#endif
 	}
 	return rc;
 }
@@ -2676,8 +2749,13 @@ static int __cam_isp_ctx_handle_irq_in_activated(void *context,
 	trace_cam_isp_activated_irq(ctx, ctx_isp->substate_activated, evt_id,
 		__cam_isp_ctx_get_event_ts(evt_id, evt_data));
 
+#ifdef CONFIG_FIH_AOP
+	CAM_DBG(CAM_ISP, "Enter: CtxId:%d, State %d, Substate %d, evt id %d",
+		 ctx->ctx_id, ctx->state, ctx_isp->substate_activated, evt_id);
+#else
 	CAM_DBG(CAM_ISP, "Enter: State %d, Substate %d, evt id %d",
 		 ctx->state, ctx_isp->substate_activated, evt_id);
+#endif
 	irq_ops = &ctx_isp->substate_machine_irq[ctx_isp->substate_activated];
 	if (irq_ops->irq_ops[evt_id]) {
 		rc = irq_ops->irq_ops[evt_id](ctx_isp, evt_data);
@@ -2686,8 +2764,13 @@ static int __cam_isp_ctx_handle_irq_in_activated(void *context,
 			ctx_isp->substate_activated);
 		__cam_isp_ctx_dump_state_monitor_array(ctx_isp);
 	}
+#ifdef CONFIG_FIH_AOP
+	CAM_DBG(CAM_ISP, "Exit: CtxId:%d, State %d Substate %d",
+		 ctx->ctx_id, ctx->state, ctx_isp->substate_activated);
+#else
 	CAM_DBG(CAM_ISP, "Exit: State %d Substate %d",
 		 ctx->state, ctx_isp->substate_activated);
+#endif
 	spin_unlock_bh(&ctx->lock);
 	return rc;
 }

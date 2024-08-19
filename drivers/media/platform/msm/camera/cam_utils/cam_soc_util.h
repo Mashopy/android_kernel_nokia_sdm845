@@ -162,6 +162,12 @@ struct cam_soc_gpio_data {
  * @clk_control:            Enable/disable clk rate control through debugfs
  * @soc_private:            Soc private data
  */
+#ifdef CONFIG_FIH_AOP
+/**
+ * @asic_supported: Added to denote a Smart Sensor
+ * @asic_uart_line: Added to control asic uart
+ */
+#endif
 struct cam_hw_soc_info {
 	struct platform_device         *pdev;
 	struct device                  *dev;
@@ -206,6 +212,12 @@ struct cam_hw_soc_info {
 	bool                            clk_control_enable;
 
 	void                           *soc_private;
+#ifdef CONFIG_FIH_AOP
+	/* add LIGHT asic check*/
+	uint32_t	                   asic_supported;
+	int                            asic_uart_line;
+	int32_t                        asic_sync_obj;
+#endif
 };
 
 /*

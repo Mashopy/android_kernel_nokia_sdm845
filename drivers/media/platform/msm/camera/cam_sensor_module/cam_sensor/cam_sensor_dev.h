@@ -95,6 +95,11 @@ struct intf_params {
  * @bob_reg_index: Hold to BoB regulator index
  * @bob_pwm_switch: Boolean flag to switch into PWM mode for BoB regulator
  */
+#ifdef CONFIG_FIH_AOP
+/**
+ * @asic_supported: Added to denote a Smart Sensor
+ */
+#endif
 struct cam_sensor_ctrl_t {
 	struct platform_device *pdev;
 	struct cam_hw_soc_info soc_info;
@@ -117,6 +122,9 @@ struct cam_sensor_ctrl_t {
 	uint32_t streamoff_count;
 	int bob_reg_index;
 	bool bob_pwm_switch;
+#ifdef CONFIG_FIH_AOP
+	uint32_t asic_supported;
+#endif
 };
 
 #endif /* _CAM_SENSOR_DEV_H_ */

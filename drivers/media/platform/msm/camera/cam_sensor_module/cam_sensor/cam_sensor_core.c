@@ -17,6 +17,14 @@
 #include "cam_soc_util.h"
 #include "cam_trace.h"
 
+#ifdef CONFIG_FIH_AOP
+#define FTM
+
+#ifdef FTM
+int8_t g_camera_ping = 0;
+#endif
+#endif
+
 static void cam_sensor_update_req_mgr(
 	struct cam_sensor_ctrl_t *s_ctrl,
 	struct cam_packet *csl_packet)
@@ -159,6 +167,16 @@ static int32_t cam_sensor_i2c_pkt_parse(struct cam_sensor_ctrl_t *s_ctrl,
 		i2c_reg_settings->is_settings_valid = 1;
 		break;
 	}
+
+#ifdef CONFIG_FIH_AOP
+	case CAM_SENSOR_PACKET_OPCODE_SENSOR_LRI_CAPTURE: {
+		i2c_reg_settings = &i2c_data->config_settings;
+		i2c_reg_settings->request_id = 1;
+		i2c_reg_settings->is_settings_valid = 1;
+		break;
+	}
+#endif
+
 	case CAM_SENSOR_PACKET_OPCODE_SENSOR_STREAMON: {
 		if (s_ctrl->streamon_count > 0)
 			return 0;
@@ -472,6 +490,11 @@ void cam_sensor_query_cap(struct cam_sensor_ctrl_t *s_ctrl,
 		s_ctrl->sensordata->subdev_id[SUB_MODULE_OIS];
 	query_cap->slot_info =
 		s_ctrl->soc_info.index;
+#ifdef CONFIG_FIH_AOP
+	query_cap->smart_sensor = s_ctrl->soc_info.asic_supported;
+	query_cap->csiphy1_slot_id =
+		s_ctrl->sensordata->subdev_id[SUB_MODULE_CSIPHY1];
+#endif
 }
 
 static uint16_t cam_sensor_id_by_mask(struct cam_sensor_ctrl_t *s_ctrl,
@@ -499,6 +522,9 @@ void cam_sensor_shutdown(struct cam_sensor_ctrl_t *s_ctrl)
 		&s_ctrl->sensordata->power_info;
 	int rc = 0;
 
+#ifdef CONFIG_FIH_AOP
+	s_ctrl->is_probe_succeed = 0;
+#endif
 	if ((s_ctrl->sensor_state == CAM_SENSOR_INIT) &&
 		(s_ctrl->is_probe_succeed == 0))
 		return;
@@ -531,6 +557,10 @@ int cam_sensor_match_id(struct cam_sensor_ctrl_t *s_ctrl)
 	int rc = 0;
 	uint32_t chipid = 0;
 	struct cam_camera_slave_info *slave_info;
+#ifdef CONFIG_FIH_AOP
+	//For imx476 ES1/ES2 stage sensor
+	uint32_t versionid = 0xFF;
+#endif
 
 	slave_info = &(s_ctrl->sensordata->slave_info);
 
@@ -546,6 +576,20 @@ int cam_sensor_match_id(struct cam_sensor_ctrl_t *s_ctrl)
 		&chipid, CAMERA_SENSOR_I2C_TYPE_WORD,
 		CAMERA_SENSOR_I2C_TYPE_WORD);
 
+#ifdef CONFIG_FIH_AOP
+	camera_io_dev_read(
+		&(s_ctrl->io_master_info),
+		0x0018,
+		&versionid, CAMERA_SENSOR_I2C_TYPE_WORD,
+		CAMERA_SENSOR_I2C_TYPE_BYTE);
+		CAM_ERR(CAM_SENSOR, "version id: 0x%x", versionid);
+
+	if( slave_info->sensor_id_reg_addr == 0x0018 ) {
+		chipid = chipid >> 8;
+		CAM_ERR(CAM_SENSOR, "reg addr: 0x%x, chipid:0x%x", slave_info->sensor_id_reg_addr, chipid);
+	}
+#endif
+
 	CAM_DBG(CAM_SENSOR, "read id: 0x%x expected id 0x%x:",
 			 chipid, slave_info->sensor_id);
 	if (cam_sensor_id_by_mask(s_ctrl, chipid) != slave_info->sensor_id) {
@@ -553,6 +597,14 @@ int cam_sensor_match_id(struct cam_sensor_ctrl_t *s_ctrl)
 				chipid, slave_info->sensor_id);
 		return -ENODEV;
 	}
+#ifdef CONFIG_FIH_AOP
+	else if ((chipid == 0x476) && ((versionid == 0x00) || (versionid == 0x02))) {
+		CAM_ERR(CAM_SENSOR, "chip id is matched, but version id is not matched");
+		CAM_ERR(CAM_SENSOR, "camera module is ES0/ES1 module, abort!");
+		return -ENODEV;
+	}
+#endif
+
 	return rc;
 }
 
@@ -623,14 +675,24 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 			goto free_power_settings;
 		}
 
+#ifdef CONFIG_FIH_AOP
+		if (s_ctrl->soc_info.asic_supported == 0) {
+#endif
 		/* Power up and probe sensor */
 		rc = cam_sensor_power_up(s_ctrl);
 		if (rc < 0) {
 			CAM_ERR(CAM_SENSOR, "power up failed");
 			goto free_power_settings;
 		}
+#ifdef CONFIG_FIH_AOP
+		}
+#endif
 
 		/* Match sensor ID */
+#ifdef CONFIG_FIH_AOP
+		if(s_ctrl->soc_info.asic_supported == 0)
+		{
+#endif
 		rc = cam_sensor_match_id(s_ctrl);
 		if (rc < 0) {
 			cam_sensor_power_down(s_ctrl);
@@ -649,12 +711,19 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 			CAM_ERR(CAM_SENSOR, "fail in Sensor Power Down");
 			goto free_power_settings;
 		}
+#ifdef CONFIG_FIH_AOP
+		}
+#endif
 		/*
 		 * Set probe succeeded flag to 1 so that no other camera shall
 		 * probed on this slot
 		 */
 		s_ctrl->is_probe_succeed = 1;
 		s_ctrl->sensor_state = CAM_SENSOR_INIT;
+#ifdef FTM
+		g_camera_ping |= 1 << (s_ctrl->soc_info.index);
+		CAM_ERR(CAM_SENSOR, "g_camera_ping=%d", g_camera_ping);
+#endif
 	}
 		break;
 	case CAM_ACQUIRE_DEV: {
@@ -688,6 +757,11 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 		bridge_params.media_entity_flag = 0;
 		bridge_params.priv = s_ctrl;
 
+#ifdef CONFIG_FIH_AOP
+		if (s_ctrl->soc_info.asic_supported == 1) {
+			s_ctrl->soc_info.asic_sync_obj = sensor_acq_dev.sync_obj;
+		}
+#endif
 		sensor_acq_dev.device_handle =
 			cam_create_device_hdl(&bridge_params);
 		s_ctrl->bridge_intf.device_hdl = sensor_acq_dev.device_handle;
@@ -702,7 +776,17 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 			goto release_mutex;
 		}
 
+#ifdef CONFIG_FIH_AOP
+		if (s_ctrl->soc_info.asic_supported == 1) {
+			if (s_ctrl->soc_info.asic_sync_obj != 0) {
+				rc = cam_sensor_power_up(s_ctrl);
+			}
+		} else {
+			rc = cam_sensor_power_up(s_ctrl);
+		}
+#else
 		rc = cam_sensor_power_up(s_ctrl);
+#endif
 		if (rc < 0) {
 			CAM_ERR(CAM_SENSOR, "Sensor Power up failed");
 			goto release_mutex;
@@ -725,7 +809,17 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 			goto release_mutex;
 		}
 
+#ifdef CONFIG_FIH_AOP
+		if (s_ctrl->soc_info.asic_supported == 1) {
+			if (s_ctrl->soc_info.asic_sync_obj != 0) {
+				rc = cam_sensor_power_down(s_ctrl);
+			}
+		} else {
+			rc = cam_sensor_power_down(s_ctrl);
+		}
+#else
 		rc = cam_sensor_power_down(s_ctrl);
+#endif
 		if (rc < 0) {
 			CAM_ERR(CAM_SENSOR, "Sensor Power Down failed");
 			goto release_mutex;
@@ -867,6 +961,25 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 			s_ctrl->sensor_state = CAM_SENSOR_CONFIG;
 			s_ctrl->i2c_data.config_settings.request_id = -1;
 		}
+#ifdef CONFIG_FIH_AOP
+		if (s_ctrl->i2c_data.config_settings.is_settings_valid &&
+			(s_ctrl->i2c_data.config_settings.request_id == 1)) {
+			rc = cam_sensor_apply_settings(s_ctrl, 0,
+				CAM_SENSOR_PACKET_OPCODE_SENSOR_CONFIG);
+			if (rc < 0) {
+				CAM_ERR(CAM_SENSOR,
+					"cannot apply config settings");
+				goto release_mutex;
+			}
+			rc = delete_request(&s_ctrl->i2c_data.config_settings);
+			if (rc < 0) {
+				CAM_ERR(CAM_SENSOR,
+					"Fail in deleting the config settings");
+				goto release_mutex;
+			}
+			s_ctrl->i2c_data.config_settings.request_id = -1;
+		}
+#endif
 	}
 		break;
 	default:

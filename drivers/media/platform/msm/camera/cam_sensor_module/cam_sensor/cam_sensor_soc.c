@@ -92,6 +92,15 @@ int32_t cam_sensor_get_sub_module_index(struct device_node *of_node,
 		of_node_put(src_node);
 	}
 
+#ifdef CONFIG_FIH_AOP
+    // optional csiphy1
+	rc = of_property_read_u32(of_node, "csiphy1-sd-index", &val);
+	if (rc < 0)
+		CAM_DBG(CAM_SENSOR, "pairing the dt node for csiphy1 rc %d", rc);
+	else
+		sensor_info->subdev_id[SUB_MODULE_CSIPHY1] = val;
+#endif
+
 	rc = of_property_read_u32(of_node, "csiphy-sd-index", &val);
 	if (rc < 0)
 		CAM_ERR(CAM_SENSOR, "paring the dt node for csiphy rc %d", rc);
